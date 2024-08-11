@@ -1,0 +1,152 @@
+---
+title: "principal_component_analysis"
+format: html
+---
+
+```{r libraries}
+library(tidyverse)
+library(tidymodels)
+```
+
+```{r get data}
+col_gm_all <- read_rds(here::here("Data/ProcessedData/col_gm_all.rds"))
+```
+
+```{r split dataset}
+set.seed(1)
+col_gm_all_split <- initial_split(col_gm_all, prop = 0.75)
+col_gm_all_train <- training(col_gm_all_split)
+col_gm_all_test <- testing(col_gm_all_split)
+```
+
+```{r step_pca}
+col_gm_pca_recipe <- recipe(
+  DI + Dmax + Dxmax + Dymax ~ ., data = col_gm_all_train
+  ) |>
+  update_role(CID, new_role = "id") |>
+  update_role(GMID, new_role = "id") |>
+  update_role(LID, new_role = "id") |>
+  update_role(TID, new_role = "id") |>
+  update_role(RPID, new_role = "id") |>
+  update_role(EventID, new_role = "id") |>
+  step_zv(all_predictors()) |>
+  step_normalize(all_numeric_predictors()) |>
+  step_dummy(all_nominal_predictors()) |>
+  step_pca(all_predictors(), num_comp = 20)
+```
+
+```{r prep pca recipe}
+col_gm_pca_prep <- col_gm_pca_recipe |>
+  prep()
+```
+
+```{r bake pca recipe}
+col_gm_pca_baked <- col_gm_pca_prep |>
+  bake(new_data = NULL)
+```
+
+```{r extract loadings}
+col_gm_pca_tidy <- tidy(col_gm_pca_prep, 4, type = "coef") # tidy step 4 - the PCA step
+head(col_gm_pca_tidy, 20)
+```
+
+```{r plot loadings with ggplot2}
+col_gm_pca_tidy |>
+  filter(component %in% c("PC1", "PC2")) |>
+  ggplot(aes(x = value, y = terms, fill = abs(value))) +
+  geom_col() +
+  theme(legend.position = "none") +
+  scale_fill_gradient(low = "black", high = "red") +
+  facet_wrap(vars(component))
+```
+
+```{r get loadings out}
+col_gm_pca_loadings <- col_gm_pca_tidy |>
+  pivot_wider(names_from = "component",
+              values_from = "value") |>
+  dplyr::select(!id)
+
+arrange(col_gm_pca_loadings, desc(abs(PC1))) |>
+  select(terms, PC1)
+
+arrange(col_gm_pca_loadings, desc(abs(PC2))) |>
+  select(terms, PC2)
+```
+```{r tidy pve}
+col_gm_pca_pve <- tidy(col_gm_pca_prep, type = "variance", number = 4) # Step 4 - PCA step
+```
+
+```{r permutation test for PCA}
+B <- 1000 # number of replications
+
+col_gm_pca_fake_variance <- vector("list", length = B)
+
+for(i in 1:B){
+  # this creates new fake data by randomly reordering every column of our dataset
+  # thus, there is no "structure" to the data and the PCs should only reflect random spurious correlations
+  fake_data <- lapply(col_gm_all_train, sample) |>
+    as.data.frame()
+
+  col_gm_pca_fake <- col_gm_pca_recipe |>
+    prep(training = fake_data) # give it the new data
+
+  # gives all the variance-related statistics
+  col_gm_pca_fake_variance[[i]] <- tidy(col_gm_pca_fake, number = 4, type = "variance")  
+}
+```
+
+```{r plot results of permutation test}
+# turn the list into a data frame
+col_gm_pca_sim_variance <- bind_rows(col_gm_pca_fake_variance)
+
+alpha_corrected <- 0.05/max(col_gm_pca_sim_variance$component) # Bonferroni correction
+
+col_gm_pca_95pct <- col_gm_pca_sim_variance |> filter(terms == "percent variance") |>
+  group_by(component) |>
+  summarize(lower = quantile(value, alpha_corrected/2),
+            upper = quantile(value, 1 - alpha_corrected/2))
+
+
+ggplot(col_gm_pca_pve |> filter(terms == "percent variance")) +
+  geom_point(mapping = aes(x = component, y = value)) +
+  geom_line(mapping = aes(x = component, y = value)) +
+  geom_errorbar(data = col_gm_pca_95pct, mapping = aes(x = component,
+                                               ymin = lower, ymax = upper),
+               color = "red", width = 0.25) +
+  labs(x = "Number of PCs",
+       y = "Percent Variance Explained")
+```
+
+Based off the above plot, the first 10 PCs are significant.
+
+```{r get loadings out 2}
+arrange(col_gm_pca_loadings, desc(abs(PC1))) |>
+  select(terms, PC1)
+
+arrange(col_gm_pca_loadings, desc(abs(PC2))) |>
+  select(terms, PC2)
+
+arrange(col_gm_pca_loadings, desc(abs(PC3))) |>
+  select(terms, PC3)
+
+arrange(col_gm_pca_loadings, desc(abs(PC4))) |>
+  select(terms, PC4)
+
+arrange(col_gm_pca_loadings, desc(abs(PC5))) |>
+  select(terms, PC5)
+
+arrange(col_gm_pca_loadings, desc(abs(PC6))) |>
+  select(terms, PC6)
+
+arrange(col_gm_pca_loadings, desc(abs(PC7))) |>
+  select(terms, PC7)
+
+arrange(col_gm_pca_loadings, desc(abs(PC8))) |>
+  select(terms, PC8)
+
+arrange(col_gm_pca_loadings, desc(abs(PC9))) |>
+  select(terms, PC9)
+
+arrange(col_gm_pca_loadings, desc(abs(PC10))) |>
+  select(terms, PC10)
+```

@@ -1,0 +1,391 @@
+---
+title: "Gam models and data"
+Author: "Bismah"
+format: html
+editor: visual
+---
+
+```{r}
+#libraries
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(mgcv)
+library(tidymodels)
+library(rsample)
+```
+
+```{r}
+# Rename data file extensions from ".txt" to ".csv"
+locations <- readr::read_csv(here::here("Data/AllLocations.csv"))
+
+
+columns_10828 <- readr::read_csv(here::here("Data/ColumnsData/ColumnsData_10828.csv"))
+
+columns_10879 <- readr::read_csv(here::here("Data/ColumnsData/ColumnsData_10879.csv"))
+
+
+gm_10828 <- readr::read_csv(here::here("Data/GMData/GMData_10828.csv"))
+         
+
+gm_10879 <- readr::read_csv(here::here("Data/GMData/GMData_10879.csv"))
+```
+
+```{r}
+columns_10828 <- columns_10828 |>
+  mutate(
+    GMID = str_replace(GMID, "GM(\\d{1})$", "GM0\\1") |>
+      as.factor()
+  )
+         
+
+columns_10879 <- columns_10879 |>
+  mutate(
+    GMID = str_replace(GMID, "GM(\\d{1})$", "GM0\\1") |>
+      as.factor()
+  )
+         
+
+gm_10828 <- gm_10828 |>
+  mutate(
+    TID = as.factor(TID),
+    RPID = as.factor(RPID),
+    EventID = as.factor(EventID),
+    GMID = str_replace(GMID, "GM(\\d{1})$", "GM0\\1") |>
+    as.factor()
+  )
+         
+gm_10879 <- gm_10879 |>
+  mutate(
+    TID = as.factor(TID),
+    RPID = as.factor(RPID),
+    EventID = as.factor(EventID),
+    GMID = str_replace(GMID, "GM(\\d{1})$", "GM0\\1") |>
+     as.factor()
+  )
+         
+locations <- locations |>
+  mutate(
+    Grid = as.factor(Grid))
+
+```
+
+```{r}
+ #linear regression with column height and the the damage index
+model_1 <- lm(DI ~ HCol, data = columns_10828)
+model_1
+```
+
+```{r}
+grpd_columns_10828 <- columns_10828 |>
+  group_by(CID)
+  grpd_columns_10828 |>
+  ggplot(aes(x = HCol)) +
+  geom_bar() +
+  scale_y_continuous(labels = function(x) x/153)
+  col_gm_10828 <- left_join(columns_10828, gm_10828,
+      by=c(
+      'T1'   = 'Time',
+      'RP'   = 'RP',
+      'GMID' = 'GMID'
+       )
+         )
+```
+
+```{r}
+#bar graph of column height
+columns_10828 %>%
+    ggplot(aes(x = HCol)) +
+    geom_bar()
+col_gm_10828 %>%
+    filter (DI >= 0 & DI <=1) %>%
+    ggplot(aes(x = factor(RP), y = DI)) +
+    geom_boxplot(color = "darkblue") +
+    theme_minimal() +
+    labs(x = "Hazard Level", 
+         y = "Damage Index", 
+         title = "Box Plot of Damage Index by Hazard Level") 
+```
+
+```{r}
+# Scatter plot colored by hazard level
+ggplot(col_gm_10828, aes(x = M, y = DI, color = factor(RP))) +
+    geom_point() +
+    labs(x = "Magnitude", 
+         y = "Damage Index", 
+         color = "Hazard Level",
+         title = "Magnitude vs Damage Index Colored by Hazard Level") +
+         scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, by = 0.1))
+```
+
+```{r}
+# Scatter plot with facets by hazard level colored with column heights
+col_gm_10828 %>%
+  filter (DI >= 0 & DI <=1) %>%
+  ggplot(aes(x = M, y = DI, color = factor(HCol))) +
+  geom_point() +
+  facet_wrap(~ factor(RP)) +
+  labs(x = "Magnitude", 
+       y = "Damage Index", 
+       color = "column height",
+       title = "Magnitude vs Damage Index Faceted by Hazard Level")
+
+```
+
+```{r}
+data_summary <- col_gm_10828 %>%
+    group_by(HCol, DCol) %>%
+    filter (DI >= 0 & DI <=1) %>%
+    summarize(DI = sum(DI))
+
+```
+
+```{r}
+# Stacked bar plot
+ggplot(data_summary, aes(x = HCol, y = DI, fill = DCol)) +
+    geom_bar(stat = "identity", position = "stack") +
+    labs(x = "Column Height", 
+         y = "Damage Index", 
+         fill = "Column Diameter",
+         title = "Damage Index by Column Height and Diameter")
+
+```
+
+```{r}
+#creating DCR
+col_gm_10828 <- col_gm_10828 %>%
+    mutate(DCR = col_gm_10828$Dmax/col_gm_10828$Du)
+```
+
+```{r}
+ col_gm_10828 %>%
+    mutate(RR = as.factor(RR)) %>%
+           filter (DI >= 0 & DI <=1, RR == 1 ) %>%
+           ggplot(aes(x = PGA, y = DI)) +
+           geom_point() +
+           geom_smooth(method = "lm", se = FALSE, color = "purple") +
+           theme_minimal() +
+           labs(x = "Peak Ground Acceleration", 
+                y = "Damage Index",
+                title = "Scatter Plot of Damage Index vs PGA")
+
+```
+
+```{r}
+         set.seed(1)
+         col_gm_10828_split <- initial_split(col_gm_10828, prop = 0.75)
+         col_gm_10828_train <- training(col_gm_10828_split)
+         col_gm_10828_test <- testing(col_gm_10828_split)
+```
+
+```{r}
+filtered <- col_gm_10828_2 %>%
+             filter (DI > 0 & DI <=1)
+
+```
+
+```{r}
+gam_model <- gam(DI ~ s(M), data = filtered)
+
+summary(gam_model)
+
+# Plot the GAM model
+plot(gam_model,  shade= TRUE, shade.col = "lightblue", xlab = "Magnitude", ylab = "Damage Index", ylim = c(0,1)) 
+   title(main = "General Additive Model of Damage Index by Magnitude")
+   
+```
+
+```{r}
+gam_model <- gam(DI ~ s(M), data = col_gm_10828_2)
+
+summary(gam_model)
+# Plot the GAM model
+plot(gam_model, residuals = TRUE, pch =1, shade= TRUE, shade.col = "lightblue", xlab = "Magnitude", ylab = "Damage Index", ylim(0,1))
+```
+
+```{r}
+
+columns_10828_2 <- col_gm_10828_2 %>%
+                     mutate(m_avg = case_when(
+                     RP == 225 ~ 7.536163,
+                     RP == 975 ~ 7.663190 ,
+                     RP == 2475 ~ 7.717330 ))
+
+filtered <- filtered %>%
+           mutate(m_avg = case_when(
+             RP == 225 ~ 7.536163,
+             RP == 975 ~ 7.663190 ,
+             RP == 2475 ~ 7.717330 ))
+
+glimpse(filtered)
+
+```
+
+```{r}
+
+gam_model <- gam(DI ~ s(PcFcAg, k = 3),
+                 data = col_gm_10828)
+# Plotting the model
+plot(gam_model, residuals = TRUE)
+```
+
+```{r}
+gam_model <- gam(DI ~ s(PcFcAg, k = 3), data = filtered)
+
+summary(gam_model)
+
+# Plot the GAM model
+plot(gam_model, shade = TRUE)
+
+```
+
+```{r}
+gam_trace <- function(model, data, var_names) {
+  for(i in 1:(length(var_names) - 1)) {
+    newdata <- data[, var_names]
+    for(j in 1:(length(var_names) - 1)) {
+      if(j != i) {
+        newdata <- newdata |>
+          mutate(
+            !!sym(var_names[j]) := median(!!sym(var_names[j]))
+          )
+      }
+    }
+    newdata$pred <- predict(model, newdata)
+    print(
+      ggplot(newdata, aes(x = !!sym(var_names[i]), y = !!sym(var_names[length(var_names)]))) +
+        geom_point() +
+        geom_line(data = newdata, aes(y = pred), color = "red") +
+        theme_minimal()
+    )
+  }
+}
+```
+
+```{r}
+gam_model <- gam(log(DI) ~ s(M, by = Rrup), data = col_gm_10828, method = "REML")
+
+summary(gam_model)
+
+# Plotting the model
+plot(gam_model, shade = TRUE, shade.col = "pink")
+
+#shows the relationship between magnitude and damage while taking in Rupture distance into account
+
+```
+
+## Final GAMs
+
+```{r preparing the training/testing data}
+
+col_gm_sample <- rbind(col_gm_10828, col_gm_10879)
+
+set.seed(1)
+
+col_gm_sample_split <- initial_split(col_gm_sample, prop = 0.8)
+col_gm_train <- training(col_gm_sample_split)
+col_gm_test <- testing(col_gm_sample_split)
+
+col_gm_train <- col_gm_train |> 
+  filter(LDI >= quantile(col_gm_train$LDI, 0.25) - 1.5 * IQR(col_gm_train$LDI) &
+         LDI <= quantile(col_gm_train$LDI, 0.75) + 1.5 * IQR(col_gm_train$LDI))
+
+col_gm_train_225  <- col_gm_train |> filter(RP == 225)
+col_gm_train_975  <- col_gm_train |> filter(RP == 975)
+col_gm_train_2475 <- col_gm_train |> filter(RP == 2475)
+```
+
+```{r creating the models for each hazard level}
+
+gam_model_225 <- gam(LDI ~ LPGV + LRS_T1 + T1 + s(Du) + s(Sa) + PcFcAg + DCol, data = col_gm_train_225, method = "REML")
+
+gam_model_975 <- gam(LDI ~ LPGV + LRS_T1 + T1 + s(Du) + s(Sa) + PcFcAg + DCol, data = col_gm_train_975, method = "REML")
+
+gam_model_2475 <- gam(LDI ~ LPGV + LRS_T1 + T1 + s(Du) + s(Sa) + PcFcAg + DCol, data = col_gm_train_2475, method = "REML")
+```
+
+```{r generating predicted DI values}
+
+model_check <- col_gm_all |>
+  mutate(
+    predLDI = as.double(case_when(
+      RP == 225  ~ predict(gam_model_225 , col_gm_all),
+      RP == 975  ~ predict(gam_model_975 , col_gm_all),
+      RP == 2475 ~ predict(gam_model_2475, col_gm_all)
+    )),
+    predDI = exp(predLDI),
+    #LDIdif = log(DI) - predLDI,
+    DIdif = DI - predDI,
+    DIdifR = 100 * (abs(DI - predDI)) / DI
+  )
+```
+
+```{r for observing the errors of the model}
+
+# Calculate absolute frequencies
+abs_freq_1 <- model_check |> 
+  filter(RP == 225) |> 
+  summarise( 
+    `<= 0.01` = sum(abs(DIdif) <= 0.01),
+    `<= 0.02` = sum(abs(DIdif) <= 0.02),
+    `<= 0.03` = sum(abs(DIdif) <= 0.03),
+    `<= 0.04` = sum(abs(DIdif) <= 0.04),
+    `<= 0.05` = sum(abs(DIdif) <= 0.05),
+    `<= 0.06` = sum(abs(DIdif) <= 0.06),
+    `<= 0.08` = sum(abs(DIdif) <= 0.08),
+    `<= 0.10` = sum(abs(DIdif) <= 0.10)
+  )
+
+abs_freq_2 <- model_check |> 
+  filter(RP == 975) |> 
+  summarise( 
+    `<= 0.01` = sum(abs(DIdif) <= 0.01),
+    `<= 0.02` = sum(abs(DIdif) <= 0.02),
+    `<= 0.03` = sum(abs(DIdif) <= 0.03),
+    `<= 0.04` = sum(abs(DIdif) <= 0.04),
+    `<= 0.05` = sum(abs(DIdif) <= 0.05),
+    `<= 0.06` = sum(abs(DIdif) <= 0.06),
+    `<= 0.08` = sum(abs(DIdif) <= 0.08),
+    `<= 0.10` = sum(abs(DIdif) <= 0.10)
+  )
+
+abs_freq_3 <- model_check |> 
+  filter(RP == 2475) |> 
+  summarise( 
+    `<= 0.01` = sum(abs(DIdif) <= 0.01),
+    `<= 0.02` = sum(abs(DIdif) <= 0.02),
+    `<= 0.03` = sum(abs(DIdif) <= 0.03),
+    `<= 0.04` = sum(abs(DIdif) <= 0.04),
+    `<= 0.05` = sum(abs(DIdif) <= 0.05),
+    `<= 0.06` = sum(abs(DIdif) <= 0.06),
+    `<= 0.08` = sum(abs(DIdif) <= 0.08),
+    `<= 0.10` = sum(abs(DIdif) <= 0.10)
+  )
+
+# Calculate relative frequencies
+rel_freq_1 <- abs_freq_1 |> mutate(100 * across(everything(), ~ . / nrow(model_check |> filter(RP == 225))))
+rel_freq_2 <- abs_freq_2 |> mutate(100 * across(everything(), ~ . / nrow(model_check |> filter(RP == 975))))
+rel_freq_3 <- abs_freq_3 |> mutate(100 * across(everything(), ~ . / nrow(model_check |> filter(RP == 2475))))
+
+# Combine absolute and relative frequencies
+freq_table <- bind_rows(abs_freq_1, rel_freq_1,
+                        abs_freq_2, rel_freq_2,
+                        abs_freq_3, rel_freq_3
+                        )
+
+# Add a row name column
+freq_table <- freq_table |> 
+  mutate(Row = c("Absolute Frequency 225", "Relative Frequency % 225",
+                 "Absolute Frequency 975", "Relative Frequency % 975",
+                 "Absolute Frequency 2475", "Relative Frequency % 2475"
+                 )) |> 
+  relocate(Row)
+
+# Print the frequency table
+error_freq <- as.data.frame(t(freq_table))
+View(error_freq)
+
+
+```
+
+

@@ -1,0 +1,87 @@
+---
+title: "gam"
+format: html
+editor: source
+---
+```{r}
+library(dplyr)
+library(tidyverse)
+library(mgcv)
+library(plotly)
+library(rgl)
+library(caret)  
+library(ggfortify)
+```
+
+```{r}
+gam_model <- gam(LDI ~ LPGV + LRS_T1 + T1 + s(Du) + s(Sa) + RP, data = col_gm_10828_lnz_or, method = "REML")
+
+summary(gam_model)
+coef(gam_model)
+gam.check(gam_model)
+```
+
+```{r}
+plot(gam_model, residuals = TRUE, all.terms = TRUE)
+```
+
+```{r}
+source(here::here("functions.R"))
+gam_trace(gam_model, col_gm_10828_lnz_or, c("LPGV", "LRS_T1", "T1", "Du", "Sa", "RP", "LDI"))
+```
+
+```{r}
+model_check <- col_gm_10879 |> 
+  mutate(
+    predLDI = predict(gam_model, col_gm_10879),
+    predDI = exp(predLDI),
+   #predDI = predict(gam_model, col_gm_10879),
+    LDIdif = log(DI) - predLDI,
+    DIdif = DI - predDI
+  )
+
+summary(model_check$DIdif)
+
+model_check |> 
+ filter(DIdif >= -1 & DIdif <= 1) |> 
+ggplot(aes(x = DIdif)) +
+  geom_histogram(bins = 100)
+```
+
+```{r}
+options(scipen = 999)
+
+# Calculate absolute frequencies
+abs_freq <- model_check |> 
+  summarise(
+    `>= 0.01` = sum(abs(DIdif) >= 0.01),
+    `>= 0.05` = sum(abs(DIdif) >= 0.05),
+    `>= 0.10` = sum(abs(DIdif) >= 0.10),
+    `>= 0.15` = sum(abs(DIdif) >= 0.15),
+    `>= 0.20` = sum(abs(DIdif) >= 0.2),
+    `>= 0.25` = sum(abs(DIdif) >= 0.25),
+    `>= 0.30` = sum(abs(DIdif) >= 0.30),
+    `>= 0.40` = sum(abs(DIdif) >= 0.40),
+    `>= 0.50` = sum(abs(DIdif) >= 0.50),
+    `>= 0.60` = sum(abs(DIdif) >= 0.60),
+    `>= 0.70` = sum(abs(DIdif) >= 0.70),
+    `>= 0.80` = sum(abs(DIdif) >= 0.80),
+    `>= 0.90` = sum(abs(DIdif) >= 0.90),
+    `>= 1.00` = sum(abs(DIdif) >= 1.00)
+  )
+
+rel_freq <- abs_freq |> 
+  mutate(100 * across(everything(), ~ . / nrow(model_check)))
+
+freq_table <- bind_rows(abs_freq, rel_freq)
+
+freq_table <- freq_table |> 
+  mutate(Row = c("Absolute Frequency", "Relative Frequency %")) |> 
+  relocate(Row)
+
+error_freq <- as.data.frame(t(freq_table))
+View(error_freq)
+
+options(scipen = 0)
+
+```

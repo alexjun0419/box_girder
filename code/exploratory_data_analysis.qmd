@@ -1,0 +1,83 @@
+---
+title: "Exploratory Data Analysis"
+format: html
+---
+
+```{r libraries}
+library(tidyverse)
+```
+
+```{r get data}
+col_gm_10828 <- read_rds(here::here("Data/ProcessedData/col_gm_10828.rds"))
+```
+
+```{r EDA}
+summary(col_gm_10828$DI)
+
+ggplot(col_gm_10828,
+       aes(x = DI)
+       ) +
+  geom_boxplot()
+
+col_gm_10828 |>
+  filter(between(DI, 0, 1)) |>
+  ggplot(aes(x = DI)) +
+  geom_boxplot()
+```
+
+```{r}
+col_gm_10828 |>
+  filter(between(DI, 0, 1)) |>
+  ggplot(aes(x = HCol, y = DI)) +
+  geom_boxplot()
+
+col_gm_10828 |>
+  filter(between(DI, 0, 1)) |>
+  ggplot(aes(x = PcFcAg, y = DI)) +
+  geom_boxplot()
+
+col_gm_10828 |>
+  filter(between(DI, 0, 1)) |>
+  ggplot(aes(x = NBar, y = DI)) +
+  geom_boxplot()
+
+col_gm_10828 |>
+  filter(between(DI, 0, 1)) |>
+  ggplot(aes(x = DBar, y = DI)) +
+  geom_boxplot()
+
+col_gm_10828 |>
+  filter(between(DI, 0, 1)) |>
+  ggplot(aes(x = RR, y = DI)) +
+  geom_boxplot()
+
+col_gm_10828 |>
+  filter(between(DI, 0, 1)) |>
+  ggplot(aes(x = DCol, y = DI)) +
+  geom_boxplot()
+
+col_gm_10828 |>
+  filter(between(DI, 0, 1)) |>
+  ggplot(aes(x = Ag, y = DI)) +
+  geom_boxplot()
+
+col_gm_10828 |>
+  filter(between(DI, 0, 1)) |>
+  ggplot(aes(x = HSize, y = DI)) +
+  geom_boxplot()
+
+col_gm_10828 |>
+  filter(between(DI, 0, 1)) |>
+  ggplot(aes(x = HSpc, y = DI)) +
+  geom_boxplot()
+
+col_gm_10828 |>
+  filter(between(DI, 0, 1)) |>
+  ggplot(aes(x = RP, y = DI)) +
+  geom_boxplot()
+
+col_gm_10828 |>
+  filter(between(DI, 0, 1)) |>
+  ggplot(aes(x = TID, y = DI)) +
+  geom_boxplot()
+```

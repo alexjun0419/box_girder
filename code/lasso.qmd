@@ -1,0 +1,237 @@
+---
+title: "lasso"
+format: html
+---
+
+```{r libraries}
+library(tidyverse)
+library(tidymodels)
+library(probably)
+```
+
+
+```{r data reading}
+col_gm_10828 <- read_rds(here::here("Data/ProcessedData/col_gm_10828.rds"))
+```
+
+
+```{r split dataset}
+set.seed(1)
+col_gm_10828_split <- initial_split(col_gm_10828, prop = 0.75)
+col_gm_10828_train <- training(col_gm_10828_split)
+col_gm_10828_test <- testing(col_gm_10828_split)
+
+col_gm_10828_cv <- vfold_cv(col_gm_10828_train, v = 10)
+```
+
+
+```{r LASSO model}
+lasso_model <- linear_reg(mode = "regression", engine = "glmnet",
+                          penalty = tune(),
+                          mixture = 1
+                          )
+```
+
+
+```{r column + theta + IM -> DI LASSO wflow}
+column_theta_im_to_di_lasso_recipe <- recipe(
+  DI ~ HCol + PcFcAg + RR + DCol + fcc + fcu + ecc +
+    ecu + Ke + Rho + T1 + Du + Dy + Desa + DIesa +
+    RP + Sa + DIrp + M + Rrup + Rx + Ztor + Rake +
+    Dip + Z1 + W + Az + PGA + PGV + CAV + AI + D575 +
+    D595, # response ~ predictors
+  data = col_gm_10828_train
+  ) |>
+  step_zv(all_predictors()) |>
+  step_normalize(all_numeric_predictors()) |>
+  step_dummy(all_nominal_predictors())
+
+column_theta_im_to_di_lasso_wflow <- workflow() |>
+  add_model(lasso_model) |>
+  add_recipe(column_theta_im_to_di_lasso_recipe)
+```
+
+
+```{r column + theta + IM -> DI LASSO tune}
+column_theta_im_to_di_lasso_tune <- tune_grid(lasso_model,
+                                        column_theta_im_to_di_lasso_recipe,
+                                        resamples = col_gm_10828_cv,
+                                        grid = grid_regular(penalty(range = c(-7, 2)),
+                                                            levels = 100)
+                                        )
+```
+
+
+```{r column + theta + IM -> DI LASSO tune RMSE}
+column_theta_im_to_di_lasso_tune |>
+  collect_metrics() |>
+  filter(.metric == "rmse") |>
+  ggplot(mapping = aes(x = penalty, y = mean)) + geom_point() + geom_line() +
+  scale_x_log10()
+```
+
+
+```{r column + theta + IM -> DI LASSO select best penalty}
+column_theta_im_to_di_lasso_best <- column_theta_im_to_di_lasso_tune |>
+  select_by_one_std_err(
+    metric = "rmse",
+    desc(penalty)
+)
+```
+
+
+```{r column + theta + IM -> DI LASSO calibration check}
+column_theta_im_to_di_lasso_wflow_final <- column_theta_im_to_di_lasso_wflow |>
+  finalize_workflow(parameters = column_theta_im_to_di_lasso_best) 
+
+column_theta_im_to_di_lasso_pred_check <- column_theta_im_to_di_lasso_wflow_final |>
+  fit_resamples(
+    resamples = col_gm_10828_cv,
+    # save the cross-validated predictions
+    control = control_resamples(save_pred = TRUE)
+) |> 
+  collect_predictions()
+
+# using built-in defaults from probably
+cal_plot_regression(
+  column_theta_im_to_di_lasso_pred_check,
+  truth = DI,
+  estimate = .pred
+)
+```
+
+
+```{r column + theta + IM -> DI LASSO fit model}
+column_theta_im_to_di_lasso_fit <- column_theta_im_to_di_lasso_wflow_final |>
+  fit(data = col_gm_10828_train)
+```
+
+
+```{r column + theta + IM -> DI LASSO path examination}
+column_theta_im_to_di_lasso_fit |>
+  extract_fit_engine() |>
+  plot(xvar = "lambda", label = TRUE)
+```
+
+
+```{r column + theta + IM -> DI LASSO coefficients}
+column_theta_im_to_di_lasso_coef <- column_theta_im_to_di_lasso_fit |>
+  broom::tidy() |>
+  mutate(abs_estimate = abs(estimate))
+column_theta_im_to_di_lasso_coef |>
+  arrange(desc(abs_estimate))
+```
+
+
+```{r column + theta + IM -> DI LASSO augment fit}
+column_theta_im_to_di_lasso_predictions <- column_theta_im_to_di_lasso_fit |>
+  broom::augment(new_data = col_gm_10828_test)
+
+column_theta_im_to_di_lasso_predictions |>
+  dplyr::select(
+    DI, 
+    .pred
+)
+rmse(column_theta_im_to_di_lasso_predictions, truth = DI, estimate = .pred)
+```
+
+
+```{r column + IM -> DI LASSO wflow}
+column_im_to_di_lasso_recipe <- recipe(
+  DI ~ HCol + PcFcAg + RR + DCol + fcc + fcu + ecc +
+    ecu + Ke + Rho + T1 + Du + Dy + Desa + DIesa +
+    Sa + DIrp + PGA + PGV + CAV + AI + D575 + D595, # response ~ predictors
+  data = col_gm_10828_train
+  ) |>
+  step_zv(all_predictors()) |>
+  step_normalize(all_numeric_predictors()) |>
+  step_dummy(all_nominal_predictors())
+
+column_im_to_di_lasso_wflow <- workflow() |>
+  add_model(lasso_model) |>
+  add_recipe(column_im_to_di_lasso_recipe)
+```
+
+
+```{r column + IM -> DI LASSO tune}
+column_im_to_di_lasso_tune <- tune_grid(lasso_model,
+                                        column_im_to_di_lasso_recipe,
+                                        resamples = col_gm_10828_cv,
+                                        grid = grid_regular(penalty(range = c(-7, 2)),
+                                                            levels = 100)
+                                        )
+```
+
+
+```{r column + IM -> DI LASSO tune RMSE}
+column_im_to_di_lasso_tune |>
+  collect_metrics() |>
+  filter(.metric == "rmse") |>
+  ggplot(mapping = aes(x = penalty, y = mean)) + geom_point() + geom_line() +
+  scale_x_log10()
+```
+
+
+```{r column + IM -> DI LASSO select best penalty}
+column_im_to_di_lasso_best <- column_im_to_di_lasso_tune |>
+  select_by_one_std_err(
+    metric = "rmse",
+    desc(penalty)
+)
+```
+
+
+```{r column + IM -> DI LASSO calibration check}
+column_im_to_di_lasso_wflow_final <- column_im_to_di_lasso_wflow |>
+  finalize_workflow(parameters = column_im_to_di_lasso_best) 
+
+column_im_to_di_lasso_pred_check <- column_im_to_di_lasso_wflow_final |>
+  fit_resamples(
+    resamples = col_gm_10828_cv,
+    # save the cross-validated predictions
+    control = control_resamples(save_pred = TRUE)
+) |> 
+  collect_predictions()
+
+# using built-in defaults from probably
+cal_plot_regression(
+  column_im_to_di_lasso_pred_check,
+  truth = DI,
+  estimate = .pred
+)
+```
+
+
+```{r column + IM -> DI LASSO fit model}
+column_im_to_di_lasso_fit <- column_im_to_di_lasso_wflow_final |>
+  fit(data = col_gm_10828_train)
+```
+
+
+```{r column + IM -> DI LASSO path examination}
+column_im_to_di_lasso_fit |>
+  extract_fit_engine() |>
+  plot(xvar = "lambda", label = TRUE)
+```
+
+
+```{r column + IM -> DI LASSO coefficients}
+column_im_to_di_lasso_coef <- column_im_to_di_lasso_fit |>
+  broom::tidy() |>
+  mutate(abs_estimate = abs(estimate))
+column_im_to_di_lasso_coef |>
+  arrange(desc(abs_estimate))
+```
+
+
+```{r column + IM -> DI LASSO augment fit}
+column_im_to_di_lasso_predictions <- column_im_to_di_lasso_fit |>
+  broom::augment(new_data = col_gm_10828_test)
+
+column_im_to_di_lasso_predictions |>
+  dplyr::select(
+    DI, 
+    .pred
+)
+rmse(column_im_to_di_lasso_predictions, truth = DI, estimate = .pred)
+```

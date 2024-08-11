@@ -1,0 +1,71 @@
+---
+title: "Data_Reading"
+format: html
+---
+
+```{r libraries}
+# Put any packages we'll be using here
+library(tidyverse)
+source(here::here("data_reading_functions.R"))
+```
+
+
+```{r data reading}
+locations <- readr::read_csv(here::here("Data/AllLocations.csv"))
+
+columns_10828 <- readr::read_csv(here::here("Data/ColumnsData/ColumnsData_10828.txt"))
+
+columns_10879 <- readr::read_csv(here::here("Data/ColumnsData/ColumnsData_10879.txt"))
+
+gm_10828 <- readr::read_csv(here::here("Data/GMData/GMData_10828.txt"))
+
+gm_10879 <- readr::read_csv(here::here("Data/GMData/GMData_10879.txt"))
+```
+
+
+```{r data wrangling}
+columns_10828 <- wrangle_columns(columns_10828) |>
+  mutate(LID = 10828)
+  
+columns_10879 <- wrangle_columns(columns_10879) |>
+  mutate(LID = 10879)
+
+gm_10828 <- wrangle_gm(gm_10828) |>
+  mutate(LID = 10828)
+
+gm_10879 <- wrangle_gm(gm_10879) |>
+  mutate(LID = 10879)
+
+locations <- locations |>
+  mutate(
+    LID = as.factor(LID),
+    Grid = as.factor(Grid)
+  )
+```
+
+
+```{r data merging}
+col_gm_10828 <- merge_columns_gm(columns_10828, gm_10828)
+
+col_gm_10879 <- merge_columns_gm(columns_10879, gm_10879)
+```
+
+
+```{r data merging 2}
+columns_all <- read_and_merge_files("columns") |>
+  wrangle_columns()
+
+gm_all <- read_and_merge_files("gm") |>
+  wrangle_gm()
+
+col_gm_all <- merge_columns_gm(columns_all, gm_all)
+```
+
+
+```{r save data}
+write_rds(col_gm_10828, here::here("Data/ProcessedData/col_gm_10828.rds"))
+
+write_rds(col_gm_10879, here::here("Data/ProcessedData/col_gm_10879.rds"))
+
+write_rds(col_gm_all, here::here("Data/ProcessedData/col_gm_all.rds"))
+```
